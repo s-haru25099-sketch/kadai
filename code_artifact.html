@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>おばけのスピカと不思議なパズル (BGM機能付き)</title>
+    <!-- Tailwind CSS for rich layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for retro pixel typography -->
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'DotGothic16', 'Press Start 2P', monospace;
+        }
+        .font-pixel {
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        @keyframes pixel-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .animate-pixel-float {
+            animation: pixel-float 2.5s steps(8) infinite;
+        }
+
+        .scanlines {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanlines::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+            z-index: 50;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        .pixel-btn {
+            border-style: solid;
+            border-width: 4px;
+            image-rendering: pixelated;
+            box-shadow: inset -4px -4px 0px 0px rgba(0,0,0,0.4);
+            transition: all 0.1s steps(2);
+        }
+        .pixel-btn:active {
+            box-shadow: inset 4px 4px 0px 0px rgba(0,0,0,0.4);
+            transform: translate(2px, 2px);
+        }
+
+        .pixel-tile {
+            image-rendering: pixelated;
+            border: 3px solid #1e1b4b;
+        }
+        .pixel-tile:hover {
+            border-color: #fbbf24;
+        }
+
+        @keyframes pixel-flash {
+            0%, 100% { border-color: #fbbf24; filter: brightness(1); }
+            50% { border-color: #ffffff; filter: brightness(1.4); }
+        }
+        .hint-flash {
+            animation: pixel-flash 0.5s steps(2) infinite;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-indigo-950 text-slate-100 min-h-screen flex flex-col justify-between scanlines selection:bg-purple-600 selection:text-white">
+
+    <!-- ヘッダー -->
+    <header class="w-full py-4 px-6 bg-purple-950 border-b-4 border-black flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="flex items-center space-x-3">
+            <span class="text-3xl animate-pulse">👻</span>
+            <div>
+                <h1 class="text-lg md:text-xl font-bold tracking-widest text-yellow-300">
+                    スピカと不思議なパズル
+                </h1>
+                <p class="text-[10px] text-purple-300 font-pixel uppercase mt-0.5">Ghost Slide Puzzle + Suno BGM Player</p>
+            </div>
+        </div>
+        
+        <!-- コントロールバー -->
+        <div class="flex flex-wrap items-center justify-center gap-3">
+            <!-- 絵柄選択 -->
+            <div class="flex items-center bg-indigo-950 border-2 border-black p-1">
+                <span class="text-[10px] text-yellow-400 font-pixel uppercase px-2">ART:</span>
+                <select id="art-select" onchange="changeTheme()" class="bg-indigo-900 border-none text-xs text-white p-1 font-bold focus:outline-none cursor-pointer">
+                    <option value="spica_heart">スピカ（ハート）</option>
+                    <option value="pumpkin">パンプキン</option>
+                    <option value="black_cat">くろねこ</option>
+                    <option value="crystal">クリスタル</option>
+                    <option value="generative_random">★無限ジェネレータ</option>
+                </select>
+            </div>
+
+            <!-- BGM Modal Button -->
+            <button onclick="toggleBGMModal()" class="p-2 bg-pink-900 hover:bg-pink-800 border-2 border-black text-xs flex items-center justify-center font-bold text-yellow-200">
+                ⚙️ BGM/音量設定
+            </button>
+
+            <!-- サウンド効果音ON/OFF -->
+            <button onclick="toggleMute()" id="mute-btn" class="p-2 bg-indigo-900 border-2 border-black hover:bg-indigo-800 text-xs flex items-center justify-center">
+                🔊 SFX: ON
+            </button>
+            
+            <div class="bg-black border-2 border-indigo-700 px-3 py-1 text-right">
+                <span class="text-[9px] text-indigo-400 block font-pixel uppercase">Moves</span>
+                <span id="move-count" class="text-pink-400 font-pixel font-bold text-base">000</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインエリア -->
+    <main class="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col md:flex-row items-center justify-center gap-8">
+        
+        <!-- 左側：おばけのスピカ (ドットキャラクターエリア) -->
+        <div class="w-full md:w-2/5 flex flex-col items-center text-center p-4">
+            
+            <!-- ピクセルドットおばけ -->
+            <div id="obake-char" class="w-56 h-56 relative animate-pixel-float cursor-pointer group bg-black/30 border-4 border-double border-indigo-800 p-2 rounded-none" onclick="speakRandom()">
+                <svg id="obake-svg" class="w-full h-full" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">
+                    <g id="pixel-body"></g>
+                </svg>
+                <div class="absolute bottom-1 right-2 text-[9px] bg-purple-900 text-purple-300 px-1 border border-black font-pixel">32x32 PIXEL</div>
+            </div>
+
+            <!-- スピカのセリフ枠 -->
+            <div class="mt-4 w-full max-w-sm">
+                <div class="bg-black border-4 border-white p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative">
+                    <div class="absolute -top-3.5 left-4 bg-yellow-400 text-black text-xs px-2 py-0.5 border-2 border-black font-bold">
+                        スピカ
+                    </div>
+                    <p id="spica-dialogue" class="text-green-400 text-sm min-h-[50px] flex items-center justify-start leading-relaxed text-left">
+                        「BGMが自動再生されているよ♪ 音量は『⚙️ BGM/音量設定』で変更してね！」
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：パズルボードエリア -->
+        <div class="w-full md:w-3/5 flex flex-col items-center">
+            
+            <!-- レトロパズル筐体外枠 -->
+            <div class="relative bg-black p-4 border-4 border-purple-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-[360px] w-full aspect-square flex items-center justify-center">
+                <!-- 完成時オーバーレイ -->
+                <div id="victory-overlay" class="absolute inset-0 bg-black/95 z-20 flex flex-col items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300 border-4 border-yellow-400">
+                    <p class="text-yellow-400 text-xs font-pixel tracking-widest animate-pulse mb-1">CONGRATULATIONS!</p>
+                    <h2 class="text-2xl font-bold text-white tracking-widest font-pixel">ALL CLEAR!!</h2>
+                    <p class="text-xs text-green-400 mt-3 font-pixel">ART WORK COMPLETED!</p>
+                    
+                    <button onclick="resetGame()" class="pixel-btn mt-6 px-6 py-2 bg-yellow-400 text-black border-black border-4 font-bold text-xs tracking-wider hover:bg-yellow-300">
+                        CONTINUE [A]
+                    </button>
+                </div>
+
+                <!-- 3x3グリッドパズル盤面 -->
+                <div id="puzzle-grid" class="grid grid-cols-3 gap-1 w-full h-full relative"></div>
+            </div>
+
+            <!-- 操作ボタン -->
+            <div class="mt-6 flex flex-wrap justify-center gap-4 w-full max-w-sm">
+                <button onclick="giveHint()" class="pixel-btn flex-1 min-w-[120px] py-2.5 px-4 bg-indigo-700 hover:bg-indigo-600 border-black border-4 font-bold text-sm text-white tracking-widest">
+                    HINT [B]
+                </button>
+                <button onclick="resetGame()" class="pixel-btn flex-1 min-w-[120px] py-2.5 px-4 bg-pink-600 hover:bg-pink-500 border-black border-4 font-bold text-sm text-white tracking-widest">
+                    RESET [START]
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 🎵 Suno BGM 設定モーダル -->
+    <div id="bgm-modal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-indigo-950 border-4 border-yellow-400 p-6 max-w-md w-full shadow-2xl relative">
+            <h3 class="text-lg font-bold text-yellow-300 mb-2 flex items-center gap-2">
+                🎵 Suno BGM URL 設定
+            </h3>
+            <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+                SunoのDirect MP3 URLまたは配信中のMP3音源のURLを指定できます。
+            </p>
+
+            <input type="text" id="bgm-url-input" value="https://s-haru25099-sketch.github.io/kadai/BGM.mp3" placeholder="https://cdn1.suno.ai/xxxxx.mp3" class="w-full bg-black border-2 border-indigo-500 p-2 text-xs text-green-400 mb-4 font-mono focus:outline-none focus:border-yellow-400">
+
+            <div class="flex items-center gap-4 mb-6">
+                <label class="text-xs text-purple-300">BGM VOLUME:</label>
+                <input type="range" id="bgm-volume" min="0" max="1" step="0.05" value="0.3" oninput="updateBGMVolume(this.value)" class="w-full accent-pink-500">
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="stopBGM()" class="pixel-btn px-3 py-1 bg-gray-700 border-black text-xs text-white">停止</button>
+                <button onclick="applyBGMUrl()" class="pixel-btn px-4 py-1.5 bg-pink-600 border-black text-xs text-white font-bold">再生開始</button>
+                <button onclick="toggleBGMModal()" class="pixel-btn px-3 py-1 bg-indigo-900 border-black text-xs text-white">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="w-full py-3 text-center text-xs text-indigo-500 border-t-4 border-black bg-purple-950">
+        <span class="font-pixel text-[10px]">&copy; 1986-2026 SPICA PIXEL LAB. ARCADE SYSTEM</span>
+    </footer>
+
+    <!-- スクリプト部 -->
+    <script>
+        // サウンド・BGM変数
+        let isMuted = false;
+        let bgmAudio = null;
+        let autoPlayInitialized = false;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Web Audio API によるレトロ風効果音 (SFX) オブジェクトの定義
+        const SOUNDS = {
+            playTone(freq, type, duration, gainVal = 0.08) {
+                if (isMuted) return;
+                try {
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + duration);
+                } catch (e) {
+                    console.error(e);
+                }
+            },
+            move() {
+                this.playTone(320, 'square', 0.06, 0.08);
+            },
+            invalid() {
+                this.playTone(140, 'sawtooth', 0.12, 0.08);
+            },
+            select() {
+                this.playTone(523.25, 'triangle', 0.08, 0.1);
+            },
+            hint() {
+                this.playTone(659.25, 'sine', 0.1, 0.1);
+                setTimeout(() => this.playTone(880, 'sine', 0.15, 0.1), 80);
+            },
+            clear() {
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    setTimeout(() => this.playTone(freq, 'triangle', 0.2, 0.12), idx * 90);
+                });
+            }
+        };
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById("mute-btn");
+            if (btn) {
+                btn.innerText = isMuted ? "🔇 SFX: OFF" : "🔊 SFX: ON";
+            }
+        }
+
+        // ==========================================
+        // 🎵 BGM コントロール (自動ループ再生 & 音量調整)
+        // ==========================================
+        function initBGMAudio() {
+            if (!bgmAudio) {
+                const urlInput = document.getElementById("bgm-url-input").value.trim();
+                bgmAudio = new Audio(urlInput);
+                bgmAudio.loop = true;
+                bgmAudio.volume = parseFloat(document.getElementById("bgm-volume").value);
+            }
+        }
+
+        // 初回のユーザー操作（クリック/タップ/キー入力）で自動再生をスタート
+        function startAutoPlayBGM() {
+            if (autoPlayInitialized) return;
+            initBGMAudio();
+
+            bgmAudio.play().then(() => {
+                autoPlayInitialized = true;
+                removeAutoPlayListeners();
+            }).catch(err => {
+                // ブラウザ制限等でブロックされた場合はユーザーの次のアクションを待機
+                console.log("Autoplay waiting for direct interaction:", err);
+            });
+        }
+
+        function removeAutoPlayListeners() {
+            const events = ['click', 'touchstart', 'touchend', 'keydown', 'mousemove', 'pointermove', 'scroll', 'focus'];
+            events.forEach(evt => window.removeEventListener(evt, startAutoPlayBGM));
+        }
+
+        function setupAutoPlay() {
+            // ページが開いた瞬間に即時再生を試行
+            startAutoPlayBGM();
+
+            // ブラウザの自動再生規制(Autoplay Policy)対策：カーソル移動や画面操作で即座に開始
+            const events = ['click', 'touchstart', 'touchend', 'keydown', 'mousemove', 'pointermove', 'scroll', 'focus'];
+            events.forEach(evt => window.addEventListener(evt, startAutoPlayBGM));
+        }
+
+        function toggleBGMModal() {
+            const modal = document.getElementById("bgm-modal");
+            modal.classList.toggle("hidden");
+        }
+
+        function applyBGMUrl() {
+            const urlInput = document.getElementById("bgm-url-input").value.trim();
+            if (!urlInput) return;
+
+            if (bgmAudio) {
+                bgmAudio.pause();
+            }
+
+            bgmAudio = new Audio(urlInput);
+            bgmAudio.loop = true;
+            bgmAudio.volume = parseFloat(document.getElementById("bgm-volume").value);
+
+            bgmAudio.play().then(() => {
+                autoPlayInitialized = true;
+                setDialogue("「わぁーい！新しいBGMが流れはじめたよ！テンション上がっちゃうね♪」");
+                drawObakePixel("happy");
+                toggleBGMModal();
+            }).catch(err => {
+                alert("音源の読み込みに失敗しました。Direct MP3 URL (.mp3) であるか確認してください。");
+                console.error("BGM Play Error:", err);
+            });
+        }
+
+        function stopBGM() {
+            if (bgmAudio) {
+                bgmAudio.pause();
+                setDialogue("「BGMを停止したよ！」");
+            }
+        }
+
+        function updateBGMVolume(val) {
+            initBGMAudio();
+            if (bgmAudio) {
+                bgmAudio.volume = parseFloat(val);
+            }
+        }
+
+        // ゲーム状態 & ロジック
+        const GOAL_STATE = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+        let currentState = [...GOAL_STATE];
+        let moves = 0;
+        let isCleared = false;
+        let hintActiveTile = null;
+        let activeTheme = "spica_heart";
+
+        // 32x32 ピクセルドット絵データ
+        const OBAKE_PIXEL_32x32 = {
+            normal: [
+                [0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,1,1,0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0],
+                [0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0],
+                [0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0],
+                [0,0,0,1,2,2,2,2,3,3,3,2,2,2,2,2,2,2,2,2,2,3,3,3,2,2,2,2,1,0,0,0],
+                [0,0,1,2,2,2,2,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,2,3,3,5,3,3,2,2,2,2,2,2,2,2,3,3,5,3,3,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,2,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,2,2,2,2,1,0,0],
+                [0,1,2,2,2,2,2,2,3,3,3,2,2,2,2,2,2,2,2,2,2,3,3,3,2,2,2,2,2,1,0],
+                [0,1,2,2,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,2,2,1,0],
+                [0,1,2,4,4,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,4,2,1,0],
+                [0,1,2,4,4,4,4,2,2,2,2,2,2,1,1,1,1,1,2,2,2,2,2,2,2,4,4,4,4,2,1,0],
+                [1,2,2,2,4,4,2,2,2,2,2,2,1,3,3,3,3,3,1,2,2,2,2,2,2,2,4,4,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,1,3,3,3,3,3,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1],
+                [0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,0],
+                [0,0,1,2,2,2,2,1,1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1,1,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,1,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,1,2,2,2,1,0,0],
+                [0,0,0,1,1,1,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1,1,1,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,0,0,1,1,2,2,1,0,1,2,2,2,2,2,2,1,0,1,2,2,1,1,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,2,2,1,0,1,2,2,1,1,2,2,1,0,1,2,2,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,2,2,1,0,0,1,1,0,0,1,1,0,0,1,2,2,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            ],
+            happy: [
+                [0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,1,1,5,5,5,5,5,5,5,5,5,5,1,1,0,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,0,0,0,0,0,0],
+                [0,0,0,0,0,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,0,0,0,0,0],
+                [0,0,0,0,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,0,0,0,0],
+                [0,0,0,0,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,0,0,0,0],
+                [0,0,0,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,0,0,0],
+                [0,0,0,1,5,5,5,5,3,3,3,5,5,5,5,5,5,5,5,5,5,3,3,3,5,5,5,5,1,0,0,0],
+                [0,0,1,5,5,5,5,3,5,5,5,3,5,5,5,5,5,5,5,5,3,5,5,5,3,5,5,5,5,1,0,0],
+                [0,0,1,5,5,5,3,5,5,5,5,5,3,5,5,5,5,5,5,3,5,5,5,5,5,3,5,5,5,1,0,0],
+                [0,0,1,5,5,5,3,5,5,5,5,5,3,5,5,5,5,5,5,3,5,5,5,5,5,3,5,5,5,1,0,0],
+                [0,1,5,5,5,5,5,3,5,5,5,3,5,5,5,5,5,5,5,5,3,5,5,5,3,5,5,5,5,1,0],
+                [0,1,5,5,4,4,5,5,3,3,3,5,5,5,5,5,5,5,5,5,5,3,3,3,5,5,4,4,5,5,1,0],
+                [0,1,5,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,4,4,4,4,5,1,0],
+                [0,1,5,4,4,4,4,5,5,5,5,5,5,1,1,1,1,1,5,5,5,5,5,5,5,4,4,4,4,5,1,0],
+                [1,5,5,5,4,4,5,5,5,5,5,5,1,5,5,5,5,5,1,5,5,5,5,5,5,5,4,4,5,5,5,1],
+                [1,5,5,5,5,5,5,5,5,5,5,5,1,3,5,5,5,3,1,5,5,5,5,5,5,5,5,5,5,5,5,1],
+                [1,5,5,5,5,5,5,5,5,5,5,5,2,1,3,3,3,1,2,5,5,5,5,5,5,5,5,5,5,5,5,1],
+                [1,5,5,5,5,5,5,5,5,5,5,5,2,2,1,1,1,2,2,5,5,5,5,5,5,5,5,5,5,5,5,1],
+                [1,1,5,5,5,5,5,5,5,5,5,5,5,2,2,2,2,2,5,5,5,5,5,5,5,5,5,5,5,5,1,1],
+                [0,1,1,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,1,1,0],
+                [0,0,1,5,5,5,5,1,1,1,1,5,5,5,5,5,5,5,5,5,5,1,1,1,1,5,5,5,5,1,0,0],
+                [0,0,1,5,5,5,1,5,5,5,5,1,5,5,5,5,5,5,5,5,1,5,5,5,5,1,5,5,5,1,0,0],
+                [0,0,0,1,1,1,5,5,5,5,5,1,5,5,5,5,5,5,5,5,1,5,5,5,5,5,1,1,1,0,0,0],
+                [0,0,0,0,0,1,5,5,5,5,5,1,5,5,5,5,5,5,5,5,1,5,5,5,5,5,1,0,0,0,0,0],
+                [0,0,0,0,0,1,5,5,5,5,1,1,5,5,5,5,5,5,5,5,1,1,5,5,5,5,1,0,0,0,0,0],
+                [0,0,0,0,0,0,1,1,5,5,1,0,1,5,5,5,5,5,5,1,0,1,5,5,1,1,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,5,5,1,0,1,5,5,1,1,5,5,1,0,1,5,5,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,5,5,1,0,0,1,1,0,0,1,1,0,0,1,5,5,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            ],
+            thinking: [
+                [0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,5,5,5,0,0,0],
+                [0,0,0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,1,1,0,0,5,5,5,5,5,0,0],
+                [0,0,0,0,0,0,0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,0,5,5,5,0,0,0],
+                [0,0,0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0],
+                [0,0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0,0],
+                [0,0,0,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,0,0,0],
+                [0,0,0,1,2,2,2,1,1,1,1,2,2,2,2,2,2,2,2,2,1,1,1,1,2,2,2,2,1,0,0,0],
+                [0,0,1,2,2,2,1,1,1,1,1,1,2,2,2,2,2,2,2,1,1,1,1,1,1,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,2,3,3,5,3,3,2,2,2,2,2,2,2,2,3,3,5,3,3,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,2,3,3,3,3,3,2,2,2,2,2,2,2,2,3,3,3,3,3,2,2,2,2,1,0,0],
+                [0,1,2,2,2,2,2,2,3,3,3,2,2,2,2,2,2,2,2,2,2,3,3,3,2,2,2,2,2,1,0],
+                [0,1,2,2,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,2,2,1,0],
+                [0,1,2,4,4,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,4,2,1,0],
+                [0,1,2,4,4,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,4,2,1,0],
+                [1,2,2,2,4,4,2,2,2,2,2,2,2,2,1,1,1,1,1,2,2,2,2,2,2,2,4,4,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+                [1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1],
+                [0,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,0],
+                [0,0,1,2,2,2,2,1,1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1,1,2,2,2,2,1,0,0],
+                [0,0,1,2,2,2,1,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,1,2,2,2,1,0,0],
+                [0,0,0,1,1,1,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1,1,1,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,2,1,2,2,2,2,2,2,2,2,1,2,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,0,1,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,1,0,0,0,0,0],
+                [0,0,0,0,0,0,1,1,2,2,1,0,1,2,2,2,2,2,2,1,0,1,2,2,1,1,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,2,2,1,0,1,2,2,1,1,2,2,1,0,1,2,2,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,1,2,2,1,0,0,1,1,0,0,1,1,0,0,1,2,2,1,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            ]
+        };
+
+        const COLOR_PALETTE = {
+            0: "transparent", 1: "#000000", 2: "#F3F4F6", 3: "#1E1B4B", 4: "#FFA5A5", 5: "#FDE047"
+        };
+
+        function drawObakePixel(emotion) {
+            const container = document.getElementById("pixel-body");
+            container.innerHTML = "";
+            const data = OBAKE_PIXEL_32x32[emotion] || OBAKE_PIXEL_32x32.normal;
+
+            data.forEach((row, y) => {
+                row.forEach((colIndex, x) => {
+                    if (colIndex !== 0) {
+                        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        rect.setAttribute("x", x);
+                        rect.setAttribute("y", y);
+                        rect.setAttribute("width", 1.05);
+                        rect.setAttribute("height", 1.05);
+                        rect.setAttribute("fill", COLOR_PALETTE[colIndex]);
+                        container.appendChild(rect);
+                    }
+                });
+            });
+        }
+
+        const DIALOGUES = {
+            tap_character: [
+                "「わわっ！つつかないで〜！バグっちゃうよ！」",
+                "「ぼくスピカ！Sunoで作った楽曲をBGMにして遊んでみてね！」",
+                "「[🎵 BGM URL] ボタンから音楽のURLを入れられるよ！」",
+                "「右上の【ART】メニューから、パズルの絵を変えられるよ！」"
+            ],
+            moving: ["「ナイススライド！」", "「うんうん、その調子！」", "「ゴールを目指そう！」"],
+            hint: ["「ここだよ！そこのドットを動かしてみてね！」", "「ピピッ！そこを入れ替えるとクリアに近づくよ！」"],
+            clear: "「パーフェクト！！ドット絵が元通りになったよ！ありがとう🏆✨」"
+        };
+
+        const PRESET_ARTWORKS = {
+            spica_heart: {
+                colors: ["#1e1e38", "#000000", "#ffffff", "#1e1b4b", "#ff9e9e", "#ff4466", "#7dd3fc"],
+                data: Array(48).fill(0).map((_, y) => {
+                    const row = Array(48).fill(0);
+                    for (let x = 6; x < 42; x++) {
+                        const distToCenter = Math.abs(24 - x);
+                        const bodyTopY = 8 + Math.floor(distToCenter * distToCenter * 0.03);
+                        const bodyBotY = 38 - Math.floor(Math.sin(x * 0.4) * 2);
+                        if (y >= bodyTopY && y <= bodyBotY) row[x] = 2;
+                    }
+                    if (y === 16 || y === 17) { row[15] = 3; row[16] = 3; row[31] = 3; row[32] = 3; }
+                    if (y === 20 || y === 21) { row[11] = 4; row[12] = 4; row[35] = 4; row[36] = 4; }
+                    const heartY = y - 24;
+                    if (heartY >= 0 && heartY < 7) {
+                        const hData = [[0,1,1,0,1,1,0],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],[1,1,1,1,1,1,1],[0,1,1,1,1,1,0],[0,0,1,1,1,0,0],[0,0,0,1,0,0,0]];
+                        hData[heartY].forEach((p, hx) => { if (p) row[21 + hx] = 5; });
+                    }
+                    return row;
+                })
+            }
+        };
+
+        function generateRandomArtwork() {
+            const data = Array(48).fill(0).map(() => Array(48).fill(0));
+            const hueBase = Math.floor(Math.random() * 360);
+            const palette = ["#1e1e38", "#000000", `hsl(${hueBase}, 85%, 50%)`, `hsl(${(hueBase + 45) % 360}, 80%, 60%)`, "#ffffff"];
+            for (let y = 4; y < 44; y++) {
+                for (let x = 4; x < 24; x++) {
+                    const rand = Math.random();
+                    let colorIndex = (rand < 0.3) ? 2 : (rand < 0.6) ? 3 : 0;
+                    data[y][x] = colorIndex;
+                    data[y][47 - x] = colorIndex;
+                }
+            }
+            return { colors: palette, data: data };
+        }
+
+        function getSlicedTileSVG(tileValue) {
+            if (tileValue === 0) return "";
+            const artwork = (activeTheme === "generative_random") ? window.generatedArtwork : (PRESET_ARTWORKS[activeTheme] || PRESET_ARTWORKS.spica_heart);
+            const targetIndex = tileValue - 1;
+            const startY = Math.floor(targetIndex / 3) * 16;
+            const startX = (targetIndex % 3) * 16;
+
+            let svgContent = `<svg class="w-full h-full bg-slate-900" viewBox="0 0 16 16" style="image-rendering: pixelated;">`;
+            for (let y = 0; y < 16; y++) {
+                for (let x = 0; x < 16; x++) {
+                    const colorIndex = artwork.data[startY + y][startX + x];
+                    const colorStr = artwork.colors[colorIndex] || "transparent";
+                    if (colorIndex !== 0) {
+                        svgContent += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${colorStr}" />`;
+                    }
+                }
+            }
+            svgContent += `</svg>`;
+            return svgContent;
+        }
+
+        function changeTheme() {
+            activeTheme = document.getElementById("art-select").value;
+            if (activeTheme === "generative_random") window.generatedArtwork = generateRandomArtwork();
+            SOUNDS.select();
+            resetGame();
+        }
+
+        function setDialogue(text) {
+            const el = document.getElementById("spica-dialogue");
+            el.innerHTML = "";
+            let i = 0;
+            function typing() {
+                if (i < text.length) {
+                    el.innerHTML += text.charAt(i);
+                    i++;
+                    setTimeout(typing, 25);
+                }
+            }
+            typing();
+        }
+
+        function speakRandom() {
+            const list = DIALOGUES.tap_character;
+            setDialogue(list[Math.floor(Math.random() * list.length)]);
+            drawObakePixel("happy");
+            setTimeout(() => drawObakePixel("normal"), 1500);
+        }
+
+        function renderBoard() {
+            const grid = document.getElementById("puzzle-grid");
+            grid.innerHTML = "";
+
+            currentState.forEach((value, index) => {
+                const cell = document.createElement("div");
+                cell.className = "relative flex items-center justify-center select-none bg-indigo-950 border-2 border-black";
+                
+                if (value !== 0) {
+                    cell.classList.add("cursor-pointer", "pixel-tile", "active:scale-95");
+                    cell.innerHTML = getSlicedTileSVG(value) + `
+                        <span class="absolute top-1 left-1 bg-black text-yellow-300 border border-black font-pixel text-[8px] px-1 scale-90">
+                            ${value}
+                        </span>
+                    `;
+                    cell.onclick = () => { if (!isCleared) tryMove(index); };
+                    if (index === hintActiveTile) cell.classList.add("hint-flash");
+                } else {
+                    cell.className = "bg-black/80 border-4 border-dashed border-purple-900";
+                }
+
+                grid.appendChild(cell);
+            });
+
+            document.getElementById("move-count").innerText = String(moves).padStart(3, '0');
+        }
+
+        function tryMove(index) {
+            const emptyIndex = currentState.indexOf(0);
+            const validMoves = getValidMoves(emptyIndex);
+
+            if (validMoves.includes(index)) {
+                currentState[emptyIndex] = currentState[index];
+                currentState[index] = 0;
+                moves++;
+                hintActiveTile = null;
+                SOUNDS.move();
+                renderBoard();
+                checkClear();
+            } else {
+                SOUNDS.invalid();
+            }
+        }
+
+        function getValidMoves(emptyIndex) {
+            const row = Math.floor(emptyIndex / 3);
+            const col = emptyIndex % 3;
+            const valid = [];
+            if (row > 0) valid.push(emptyIndex - 3);
+            if (row < 2) valid.push(emptyIndex + 3);
+            if (col > 0) valid.push(emptyIndex - 1);
+            if (col < 2) valid.push(emptyIndex + 1);
+            return valid;
+        }
+
+        function checkClear() {
+            const solved = GOAL_STATE.every((val, i) => currentState[i] === val);
+            if (solved) {
+                isCleared = true;
+                drawObakePixel("happy");
+                setDialogue(DIALOGUES.clear);
+                SOUNDS.clear();
+                const overlay = document.getElementById("victory-overlay");
+                overlay.classList.remove("opacity-0", "pointer-events-none");
+            }
+        }
+
+        function resetGame() {
+            isCleared = false;
+            moves = 0;
+            hintActiveTile = null;
+            currentState = [...GOAL_STATE];
+            document.getElementById("victory-overlay").classList.add("opacity-0", "pointer-events-none");
+            drawObakePixel("normal");
+
+            let emptyIndex = currentState.indexOf(0);
+            for (let i = 0; i < 100; i++) {
+                const possibleMoves = getValidMoves(emptyIndex);
+                const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                currentState[emptyIndex] = currentState[randomMove];
+                currentState[randomMove] = 0;
+                emptyIndex = randomMove;
+            }
+            renderBoard();
+        }
+
+        function giveHint() {
+            if (isCleared) return;
+            SOUNDS.hint();
+            drawObakePixel("thinking");
+            const empty = currentState.indexOf(0);
+            const valid = getValidMoves(empty);
+            hintActiveTile = valid[Math.floor(Math.random() * valid.length)];
+            renderBoard();
+            setDialogue(DIALOGUES.hint[0]);
+        }
+
+        window.onload = function() {
+            window.generatedArtwork = generateRandomArtwork();
+            resetGame();
+            
+            // BGM自動ループ再生のセットアップ
+            setupAutoPlay();
+            setDialogue("「BGMが自動再生されているよ！音量は『⚙️ BGM/音量設定』で調整してね！」");
+        };
+    </script>
+</body>
+</html>
